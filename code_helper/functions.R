@@ -1,15 +1,15 @@
+#############################################################
+# functions.R
+#
+# This file contains support functions for executing the main
+# data analyses
+#############################################################
+
 library(sf)
 library(mixtools)
 
+# This function puts the input iNaturalist data on a hexagonal grid
 associate_wgrid <- function(input_dat, hex_short_diameter) {
-  # 
-  # idaho <- maps::map(database = "state", regions = "id", fill = T, plot = F)
-  # IDs <- sapply(strsplit(idaho$names, ":"), function(x) x[1])
-  # id_poly <- map2SpatialPolygons(idaho, IDs = IDs, 
-  #                                proj4string=CRS("+proj=longlat +datum=WGS84"))
-  # id_poly <- spTransform(id_poly, CRS("+init=epsg:2163 +datum=WGS84")) ## ERROR for Sara
-  # id_poly <- make_grid(id_poly, cell_diameter = 20000)
-  
   obs_points <- st_as_sf(x = input_dat, coords = c("longitude", "latitude"))
   st_crs(obs_points) <- st_crs("+proj=longlat +datum=WGS84")
   
@@ -28,6 +28,9 @@ associate_wgrid <- function(input_dat, hex_short_diameter) {
   return(input_dat)
 }
 
+
+# This function creates a summary list giving the weighted species pool in
+# each hex as realized in input_dat
 make_grid_summary <- function(input_dat) {
   
   grid_summary_list <- list()
@@ -42,6 +45,9 @@ make_grid_summary <- function(input_dat) {
   return(grid_summary_list)
 }
 
+
+# This function returns one user's spatial sampling history
+# (which grids they sampled in, in order)
 get_user_gridhist <- function(input_dat, username) {
   toReturn <- input_dat %>% 
     filter(user_login == username) %>% 
@@ -51,11 +57,16 @@ get_user_gridhist <- function(input_dat, username) {
   return(toReturn)
 }
 
+
+# This function produces the permuted distributions according to each user's
+# spatially explicit sampling history, for a given "true" bias index.
 perm_dist_spatial <- function(grid_summary, grid_sampling_history, bias_index = 0) {
   #browser()
   
+  # Get the overall species pool
   taxon_key <- distinct(do.call(rbind, grid_summary), scientific_name, iconic_taxon_name)
   
+  # Make a data frame to store the new sampling history
   new_samples <- data.frame(
     observed_on = 1:length(grid_sampling_history),
     scientific_name = draw_new_samples_spatial(
@@ -64,18 +75,14 @@ perm_dist_spatial <- function(grid_summary, grid_sampling_history, bias_index = 
   ) %>% 
     left_join(taxon_key, by = "scientific_name") %>% 
     rename(taxa = iconic_taxon_name)
-  
-  # test <- data.frame(observed_on = 1:numObsT, scientific_name = sample(species, numObsT, replace = T, prob = species_wts))
-  # 
-  # toM <- cbind.data.frame(species, taxa)
-  # 
-  # test <- merge(test, toM, by.x = c("scientific_name"), by.y = "species", all.x = T, all.y = F)
-  
+
+  # Summarize the new samples
   test <- new_samples %>%
     group_by(taxa, scientific_name) %>%
     arrange(observed_on) %>%
     mutate(species_id_ct = row_number())
   
+  # Is each species new?
   test <- test %>% mutate(isNew = (species_id_ct == 1))
   
   ## number unique up to this point, number obs up to this point
@@ -85,7 +92,7 @@ perm_dist_spatial <- function(grid_summary, grid_sampling_history, bias_index = 
   
   test$numUnique <- cumsum(test$isNew)
   
-  ## what is the test statistic? --> number of species that are unique per number of observations
+  ## test statistic --> number of species that are unique per number of observations
   
   ## time to first dup
   timeToFirstDup <- test$observed_on[(which(diff(test$numUnique) == 0)[1] + 1)]
@@ -100,21 +107,7 @@ perm_dist_spatial <- function(grid_summary, grid_sampling_history, bias_index = 
     summarise(count = n()) %>%
     mutate(prop = count / sum(count))
   
-  coin_flip <- runif(1, 0, 1)
-  # 
-  # if (coin_flip < 0.1) {
-  #   toFlip <- cbind.data.frame(site = 1:nrow(test), species = test$scientific_name, abundance = rep(1, nrow(test)))
-  #   
-  #   test_mtx <- matrify(toFlip)
-  #   
-  #   sac <- specaccum(test_mtx)
-  #   toReturn1 <- specslope(sac, nrow(test) - 1)
-  #   toReturn2 <- specslope(sac, floor(nrow(test)))
-  # } else {
-  toReturn1 <- NA
-  toReturn2 <- NA
-  # }
-  
+
   
   
   
@@ -124,24 +117,11 @@ perm_dist_spatial <- function(grid_summary, grid_sampling_history, bias_index = 
     numU50 = NA
   }
   
-  # Hmax = - log(length(species))
-  
-  
-  # H = sum(byS$prop*log(byS$prop))
-  
-  # J =  H/Hmax
-  
-  
-  
+  # Return the test statistic -- proportion of unique specs.
   max(test$numUnique) / nrow(test)
-  # return(list(
-  #   propUnique = max(test$numUnique) / nrow(test), 
-  #   timeToFirstDup = timeToFirstDup, byTaxa = byT,
-  #   sac_slope = toReturn1, sac_slope_half = toReturn2, 
-  #   numU50 = numU50#, evenness = J
-  # ))
 }
 
+# This function draws new samples from a user's sampling history
 draw_new_samples_spatial <- function(grid_summary, 
                                      grid_sampling_history, 
                                      bias_index) {
@@ -150,11 +130,11 @@ draw_new_samples_spatial <- function(grid_summary,
     stop("bias_index must be between -1 and 1")
   }
   
-  # For-loop first
-  
   new_samples_spec <- character(length(grid_sampling_history))
-  
+
+    
   if (bias_index == 0) {
+    # Sample species neutrally, according to availability
     for (i in 1:length(grid_sampling_history)) {
       sampled_index <- sample(size = 1,
                               1:nrow(grid_summary[[grid_sampling_history[i]]]), 
@@ -163,7 +143,7 @@ draw_new_samples_spatial <- function(grid_summary,
       new_samples_spec[i] <- grid_summary[[grid_sampling_history[i]]]$scientific_name[sampled_index]
     }
   } else if (bias_index > 0) {
-    
+    # Sample species preferentially for new species
     for (i in 1:length(grid_sampling_history)) {
       
       report_newspec_only <- rbinom(1, 1, bias_index)
@@ -193,7 +173,7 @@ draw_new_samples_spatial <- function(grid_summary,
       }
     }
   } else {
-    # Bias_index < 0
+    # Sample species preferentially for those previously observed
     for (i in 1:length(grid_sampling_history)) {
       
       report_oldspec_only <- rbinom(1, 1, -bias_index)
@@ -228,7 +208,8 @@ draw_new_samples_spatial <- function(grid_summary,
 }
 
 
-
+# This function runs the whole exercise to generate the permutations
+# of species histories for a given user
 runOneUser <- function(i, target_users, bias_index_grid, grid_summary, dat,
                        npoints_fine, n, taxon = NULL, write.out = FALSE) {
   
@@ -289,7 +270,8 @@ runOneUser <- function(i, target_users, bias_index_grid, grid_summary, dat,
   return(bind_rows(this_user, this_user_finer))
 }
 
-
+# Create a plot of one user's observed uniqueness value and the alternative
+# distributions against which it is compared
 plot_user <- function(user_dists, user_values,
                       this_user_login = NULL, this_taxon = NULL) {
   
@@ -324,6 +306,7 @@ plot_user <- function(user_dists, user_values,
                    ". nobs = ", this_user_values$nobsT))
 }
 
+# Helper function for mixture of normals
 get_density <- function(val, distr) {
   test <- density(distr, cut = 0)
   grid <- cbind.data.frame(x = test$x, f.x = test$y)
@@ -333,8 +316,9 @@ get_density <- function(val, distr) {
   }
   
   grid$f.x[which.min(abs(grid$x - val))]
-} ## this is what we want
+} 
 
+# Get mixture weights from alternative distributions given a true observed value
 get_index_weights <- function(val, distr_df) {
   
   weights <- distr_df %>% 
@@ -347,9 +331,7 @@ get_index_weights <- function(val, distr_df) {
 }
 
 
-#this_user_login = "kyleshikes"
-#this_taxon = "Herptiles"
-
+# Compute the bias index for a target user, given permutation output
 get_bias_index <- function(user_dists, user_values,
                            this_user_login = NULL, this_taxon = NULL) {
   cat(this_user_login, "-", this_taxon, "\n")

@@ -1,13 +1,22 @@
+#############################################################
+# 3_calculate_NS_index.R
+#
+# This file contains the code for calculating the NS index
+# based on the results from script 2
+#############################################################
+
 library(tidyverse)
 library(mixtools)
 library(parallel)
 
+# Load in helper functions
 source("helper_code/functions.R")
 
 ncores <- 40
 
+### Read in the user-level summary results
 summaries <- list.files("intermediate", pattern = "user_summary*.", full.names = TRUE)
-# stop("Update nchar below")
+# might need to update nchar depending on filepaths:
 taxa <- substr(summaries, 22, nchar(summaries)-4)
 
 summary_df <- bind_rows(map2_df(summaries, taxa, function(x, y) {
@@ -23,32 +32,14 @@ helper <- function(path){
   temp
 }
 
+# Read in user results in detail and user histories
 user_values <- bind_rows(lapply(list.files("intermediate/", pattern = 'user_summary_',
                                            full.names = TRUE), helper))
 user_dists <- bind_rows(lapply(list.files("intermediate/", pattern = 'userDist',
                                           full.names = TRUE), read_csv))
 
-
-
-## these are way out of the distributions
-# plot_user(this_taxon = "Herptiles", this_user = "kyleshikes", user_dists, user_values)
-# plot_user(this_taxon = "Herptiles", this_user = "wabbytwax", user_dists, user_values)
-
-
-# plot_user(this_taxon = "Herptiles", this_user = "dnydick", user_dists, user_values)
-
-
-
-
-
-
-## when out of bounds need something
-#tryThis = get_bias_index(user_dists, user_values,this_user_login = "kyleshikes", this_taxon = "Herptiles")
-
-#tryThis = get_bias_index(user_dists, user_values,this_user_login = "dnydick", this_taxon = "Herptiles")
-
-
-## this part is pretty slow
+# Loop over all specs, in parallel, and calculate the NS index based on a 
+# mixture of normals
 if (ncores > 1) {
   
   cl <- makeCluster(ncores)
@@ -64,6 +55,7 @@ if (ncores > 1) {
                                            "user_dists",
                                            "user_values"))
   
+  # apply the function (see functions.R)
   result_list <- parLapply(cl, 1:nrow(user_values), function(i) {
     get_bias_index(user_dists = user_dists,
                    user_values = user_values, 

@@ -1,3 +1,12 @@
+#############################################################
+# validation1_usertypes.R
+#
+# This file conducts a series of simulations testing 
+# our ability to recover true biases depending on the overall
+# makeup of the user pool. We do not present these results in
+# the main manuscript
+#############################################################
+
 library(tidyverse)
 library(parallel)
 

@@ -1,3 +1,14 @@
+#############################################################
+# validation2_usertypes.R
+#
+# This file conducts a series of simulations testing 
+# our ability to recover true biases as the number of users
+# and number of species varies. This simulation is presented
+# in the main manuscript.
+#############################################################
+
+
+
 library(tidyverse)
 library(parallel)
 
@@ -208,11 +219,4 @@ results_df %>%
   xlab("True bias index") + ylab("Num. individuals") 
 
 
-
-# result_list_50spec$result_df %>% 
-#   ggplot() + 
-#   geom_point(aes(true_nobs, bs_se, col = type,
-#                  shape = true_nobs)) +
-#   scale_color_manual(values = colors) +
-#   ggtitle("Validation simulation 3")
 # 

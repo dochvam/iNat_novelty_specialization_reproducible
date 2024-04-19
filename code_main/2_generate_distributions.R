@@ -1,15 +1,21 @@
+#############################################################
+# 2_generate_distributions
+#
+# This file executes the permutation exercise for creating
+# alternative distributions of user detection histories
+#############################################################
+
 library(tidyverse)
 library(lubridate)
 library(pbapply)
 
-
 ncores <- 40
 
-# # from cleanPA1.R
-
+# Read in processed data
 data_user_species <- read_csv("intermediate/data_user_species.csv")
 user_info <- read_csv("intermediate/pa_user_info.csv")
 
+# Load helper functions
 source("helper_code/functions.R")
 
 
@@ -22,12 +28,12 @@ userCutoff_All <- 100
 # Number of obs. a user needs to be included - taxon-specific
 userCutoff_Taxon <- 25
 
-## numbers to get us to 25 obs
-
+# Loop over each taxon
 for (t_ind in 1:length(target_taxa)) {
   thistaxon <- target_taxa[[t_ind]]
   cat("Running model for taxon:", thistaxon)
   
+  # Extract the relevant data
   if (thistaxon == "All") {
     dat_thistaxon <- data_user_species
     user_info <- dat_thistaxon %>% group_by(user_login) %>% 
@@ -163,7 +169,7 @@ for (t_ind in 1:length(target_taxa)) {
   }
    ## 3.4 hours
   
-  
+  # Write out the results
   userDistributions <- bind_rows(byUserResultsAlt) %>% 
     mutate(taxon = thistaxon)
   write_csv(userDistributions, paste0("intermediate/userDistributions_", thistaxon, ".csv"))

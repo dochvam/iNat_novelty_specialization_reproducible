@@ -1,5 +1,12 @@
-#### function to run the simulation ####
+#############################################################
+# functions.R
+#
+# This file contains support functions for executing the 
+# validation simulations
+#############################################################
 
+
+# Run the entire simulation for a given set of conditions:
 run_validation_simulation <- function(nusers, nspecies, nhex, 
                                       nobs_per_user, bias_indexes, ncores,
                                       sim_name, real_det_rates = NULL) {
@@ -109,7 +116,7 @@ run_validation_simulation <- function(nusers, nspecies, nhex,
   ))
 }
 
-
+# Simulate a true prevelance gradient for a species pool
 simulate_prevalence <- function(nspecies, abundance, nhex, zif) {
   
   if (length(abundance) == 1) {
@@ -145,7 +152,7 @@ simulate_prevalence <- function(nspecies, abundance, nhex, zif) {
   return(grid_summary)
 }
 
-
+# Simulate spatial patterns in sampling for all the simulated users
 simulate_gridcell_hists <- function(nusers, nhex, nobs_per_user) {
   
   user_df_list <- list()
@@ -162,6 +169,9 @@ simulate_gridcell_hists <- function(nusers, nhex, nobs_per_user) {
   return(bind_rows(user_df_list))
 }
 
+
+# Simulate observer behaviors using the permutation function from the main
+# analysis
 generate_user_data <- function(grid_summary_true, user_gridcell_hists,
                                bias_indexes) {
   

@@ -1,3 +1,10 @@
+#############################################################
+# 4_vis.R
+#
+# This file produces a variety of visualizations based on the
+# outputs of script 1-3
+#############################################################
+
 library(tidyverse)
 source("regroup/functions.R")
 

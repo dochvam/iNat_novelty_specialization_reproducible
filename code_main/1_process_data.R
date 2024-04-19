@@ -1,8 +1,19 @@
+#############################################################
+# 1_process_data.R
+#
+# This file contains the code we used to process the iNaturalist
+# data before conducting all analyses
+#############################################################
+
+
 # quality_grade=research&identifications=any&place_id=42&d1=2008-01-01&d2=2018-12-31
 library(tidyverse)
 library(lubridate)
 
-#### one time ####
+# Because of the size of the data, we retrieved iNaturalist data from multiple
+# downloads, meaning that we had to process multiple input files:
+
+# Load in each data file, apply filters, and concatenate
 data1 <- read_csv("data/observations-365569.csv") %>%
   filter(!is.na(scientific_name)) %>%
   filter(quality_grade == "research") %>% 
@@ -36,7 +47,7 @@ data3 <- read_csv("data/observations-366081.csv") %>%
 data <- rbind.data.frame(data1, data2, data3) %>% 
   filter(!duplicated(id))
 
-
+# Summarize by species
 bySpecies <- data %>%
   group_by(species, iconic_taxon_name) %>%
   summarise(species_count = n())
@@ -45,7 +56,7 @@ bySpecies <- bySpecies %>% mutate(obs_prev = species_count / nrow(data))
 data$eventDate = as.Date(data$eventDate)
 
 
-## how many total observations?
+# how many total observations for each user?
 user_info <- data %>%
   group_by(user_login) %>%
   summarize(
@@ -54,6 +65,7 @@ user_info <- data %>%
   ) %>%
   arrange(desc(nobsT))
 
+# how many total observations for each user (by taxon)?
 user_infoT <- data %>%
   group_by(user_login, iconic_taxon_name) %>%
   summarize(
@@ -113,7 +125,7 @@ data_overall_species <- data_overall_species %>%
 data_overall_species$numUnique <- cumsum(data_overall_species$isNew)
 data_overall_species$numObs <- cumsum(data_overall_species$dummy)
 
-
+# Select the columns to keep
 data_user_species <- data_user_species %>% 
   select(id, eventDate, species,
          user_species_id_ct, first_obs, nobsT,
@@ -121,6 +133,8 @@ data_user_species <- data_user_species %>%
          isNew, numUnique, numObs, iconic_taxon_name, 
          scientific_name = species, user_login = user_login)
 
+
+# Write out data frames for later use
 write_csv(data_user_species, "intermediate/data_user_species.csv")
 write_csv(user_info, "intermediate/pa_user_info.csv")
 
