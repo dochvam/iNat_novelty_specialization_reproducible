@@ -6,7 +6,7 @@
 #############################################################
 
 library(tidyverse)
-source("regroup/functions.R")
+source("code_helper/functions.R")
 
 
 colors <- c("Specialization" = "#f0027f",
@@ -14,21 +14,21 @@ colors <- c("Specialization" = "#f0027f",
             "Novelty" = "#386cb0")
 
 
-result_df <- read_csv("regroup/estimated_user_BIs_allPA.csv") %>% 
+result_df <- read_csv("intermediate/estimated_user_BIs_allPA.csv") %>% 
   mutate(type = recode(type, "Favoritism" = "Specialization")) %>% 
   mutate(type = factor(type, levels = names(colors)))
   
 
-user_info <- lapply(list.files("regroup", pattern = "user_summary_",
+user_info <- lapply(list.files("intermediate/", pattern = "user_summary_",
                                full.names = TRUE), read_csv) %>% 
   bind_rows()
 
 #### Make some example figs ####
 
-user_dists <- bind_rows(lapply(list.files("regroup/", pattern = 'userDist',
+user_dists <- bind_rows(lapply(list.files("intermediate/", pattern = 'userDist',
                                           full.names = TRUE), read_csv))
 
-plot_user(this_taxon = "All", this_user = "catspit", user_dists, user_info)
+plot_user(this_taxon = "All", this_user_login = "catspit", user_dists, user_info)
 
 
 user_dists %>% filter(taxon == "All", 
@@ -189,10 +189,10 @@ cross_taxon_fig <- gridExtra::arrangeGrob(grobs  = list(
 
 #### save some plots ####
 
-ggsave("regroup/figs/fig1_counts.jpg", taxon_counts_fig, width = 7, height = 6)
-ggsave("regroup/figs/fig2_ptcloud.jpg", pointcloud_fig, width = 9, height = 6)
-ggsave("regroup/figs/fig3_SEs.jpg", se_fig, width = 9, height = 7)
-ggsave("regroup/figs/fig4_crossplot.jpg", cross_taxon_fig, width = 12, height = 5.5)
+ggsave("plots/fig1_counts.jpg", taxon_counts_fig, width = 7, height = 6)
+ggsave("plots/fig2_ptcloud.jpg", pointcloud_fig, width = 9, height = 6)
+ggsave("plots/fig3_SEs.jpg", se_fig, width = 9, height = 7)
+ggsave("plots/fig4_crossplot.jpg", cross_taxon_fig, width = 12, height = 5.5)
 
 #### Representative user plots (supplement?) ####
 
@@ -201,42 +201,6 @@ user_values <- bind_rows(lapply(list.files("regroup/", pattern = 'user_summary_'
 user_dists <- bind_rows(lapply(list.files("regroup/", pattern = 'userDist',
                                           full.names = TRUE), read_csv))
 
-
-plot_user <- function(user_dists, user_values,
-                      this_user_login = NULL, this_taxon = NULL) {
-  
-  if (is.null(this_user_login) && is.null(this_taxon)) {
-    this_comparison <- user_values %>% 
-      distinct(user_login, taxon) %>% 
-      sample_n(size = 1)
-    this_user_login <- this_comparison$user_login
-    this_taxon <- this_comparison$taxon
-  } else if (is.null(this_user_login)) {
-    this_comparison <- user_values %>% 
-      distinct(user_login, taxon) %>% 
-      filter(taxon == this_taxon) %>% 
-      sample_n(size = 1)
-    this_user_login <- this_comparison$user_login
-  }
-  
-  this_user_dists <- user_dists %>% filter(user == this_user_login, 
-                                           taxon == this_taxon)
-  this_user_values <- user_values %>% filter(user_login == this_user_login,
-                                             taxon == this_taxon)
-  ggplot() +
-    geom_density(data = this_user_dists, 
-                 aes(propUnique, group = bias_index, fill = bias_index), 
-                 alpha = 0.5) +
-    scale_fill_gradient2(mid = "gray") +
-    geom_vline(data = this_user_values, aes(xintercept=observed_propUnique)) +
-    theme_minimal() +
-    ylab("") +
-    ggtitle(paste0("User ", this_user_login, ", taxon: ", this_taxon,
-                   ". nobs = ", this_user_values$nobsT))
-}
-
-plot_user(this_taxon = "All", this_user = "kyleshikes", 
-          user_dists, user_values)
 
 # Figures:
 # > Counts by taxon
@@ -254,8 +218,8 @@ library(terra)
 library(tidyterra)
 
 # Make hex counts
-source("regroup/functions.R")
-data_user_species <- read_csv("regroup/data_user_species.csv")
+source("code_helper/functions.R")
+data_user_species <- read_csv("intermediate/data_user_species.csv")
 
 dat <- associate_wgrid(input_dat = data_user_species,
                        hex_short_diameter = 25000)
@@ -288,7 +252,7 @@ gridmap2 <- ggplot() +
   theme_minimal() +
   scale_fill_viridis_c("Log number of \nspecies observed")
 
-ggsave("regroup/figs/hexmap.jpg", gridmap, width = 6, height = 3.5)
+ggsave("plots/hexmap.jpg", gridmap, width = 6, height = 3.5)
 
 
 #### Visualize basics ####
@@ -304,7 +268,7 @@ user_info %>%
 
 
 # Num. species per taxon
-all_dat <- read_csv("regroup/data_user_species.csv") %>% 
+all_dat <- read_csv("intermediate/data_user_species.csv") %>% 
   mutate(iconic_taxon_name = recode(iconic_taxon_name, "Reptilia" = "Herptiles",
                                     "Amphibia" = "Herptiles",
                                     "Arachnida" = "Arachnids", "Aves" = "Birds",
@@ -334,14 +298,14 @@ for (i in 1:nrow(spec_counts)) {
   
 spec_counts %>% 
   ggplot() +
-  geom_col(aes(iconic_taxon_name, n)) +
+  geom_col(aes(taxon, nspec)) +
   theme_minimal() + xlab("Taxonomic group") + ylab("Num. species") +
   ggtitle("Number of species in each taxonomic group")
 
 #### Visualize top orders of favoritists ####
 # Make hex counts
-source("regroup/functions.R")
-data_user_species <- read_csv("regroup/data_user_species.csv")
+source("code_helper/functions.R")
+data_user_species <- read_csv("intermediate/data_user_species.csv")
 
 favoritists <- result_df %>% 
   filter(taxon == "All", type == "Specialization")
@@ -393,4 +357,71 @@ ggplot(top_taxon_data) +
   xlab("Pct. of observations which are the top taxon") +
   ylab("Density") +
   theme_minimal()
+
+
+#### Make example plots of particular users ####
+user_specialist <- "huntingbon"
+user_novelist <- "kfryberger"
+
+result_df %>% 
+  filter(user_login %in% c(user_specialist, user_novelist),
+         taxon == "All")
+
+taxon_colors <- c(
+  "Plants" = "#b2df8a",
+  "Arachnids" = "#a6cee3",
+  "Birds" = "#1f78b4",
+  "Herptiles" = "#ff7f00",
+  "Insects" = "#fb9a99",
+  "Mammals" = "#e31a1c",
+  "Other" = "gray"
+)
+
+pA <- plot_user(user_dists, user_values, user_specialist, "All") +
+  ggtitle("User 1 (specialist)") + theme(plot.title = element_text(size = 9, hjust = 0.5))
+pB <- plot_user(user_dists, user_values, user_novelist, "All") +
+  ggtitle("User 2 (novelist)") + theme(plot.title = element_text(size = 9, hjust = 0.5))
+
+# Make a barcode for user A
+(
+pC <- all_dat %>% 
+  filter(user_login %in% c(user_specialist, user_novelist)) %>% 
+    mutate(NAME = ifelse(user_login == user_specialist, 
+                         "User 1 (specialist)", "User 2 (Novelist)")) %>% 
+  mutate(iconic_taxon_name = ifelse(iconic_taxon_name %in% unique(result_df$taxon),
+                                    iconic_taxon_name, "Other")) %>% 
+  mutate(iconic_taxon_name = factor(iconic_taxon_name, levels = c(sort(unique(result_df$taxon)), "Other"))) %>% 
+  ggplot() + 
+  geom_tile(aes(numObs, 1, fill = iconic_taxon_name)) +
+  scale_fill_manual("Taxon", values = taxon_colors) +
+    theme_minimal() + xlab("Observation") + ylab("")  +
+    facet_wrap(~NAME) + theme(axis.text.y = element_blank()) +
+    ggtitle("B. Detection history barcode (by taxon)")
+)
+(
+pD <- all_dat %>% 
+    filter(user_login %in% c(user_specialist, user_novelist)) %>% 
+    mutate(NAME = ifelse(user_login == user_specialist, 
+                         "User 1 (specialist)", "User 2 (Novelist)")) %>% 
+    mutate(iconic_taxon_name = ifelse(iconic_taxon_name %in% unique(result_df$taxon),
+                                    iconic_taxon_name, "Other")) %>% 
+  mutate(iconic_taxon_name = factor(iconic_taxon_name, levels = c(sort(unique(result_df$taxon)), "Other"))) %>% 
+  ggplot() + 
+  geom_tile(aes(numObs, 1, fill = isNew)) +
+  scale_fill_manual("New species", values = c("gray", "#a00040")) +
+  theme_minimal() + xlab("Observation") + ylab("")  +
+    facet_wrap(~NAME) + theme(axis.text.y = element_blank()) +
+  ggtitle("C. Detection history barcode (new vs. old species)")
+)
+
+library(grid)
+library(gridExtra)
+layout_mtx <- matrix(c(1,2,3,3,4,4), nrow = 3, byrow = T)
+title <- grid::textGrob("A. Observed and alternative distributions from permutation test", 
+                        gp = gpar(fontsize = 14), hjust = 0, x =  unit(8, "mm"))
+users_fig <- gridExtra::arrangeGrob(pA, pB, pC, pD, layout_matrix = layout_mtx,
+                                    heights = c(0.7, 0.5, 0.5),
+                                    top = title)
+ggsave(users_fig, filename = "plots/users_fig.jpg",
+       width = 10, height = 7)
 

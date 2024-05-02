@@ -21,8 +21,9 @@ data1 <- read_csv("data/observations-365569.csv") %>%
   mutate(observed_on = as.Date(observed_on, format = "%Y-%m-%d")) %>% 
   rename(species = scientific_name,
          eventDate = observed_on) %>% 
+  filter(!is.na(eventDate)) %>% 
   mutate(year = lubridate::year(eventDate))  %>%
-  filter(!is.na(eventDate))
+  filter(!is.na(license), license %in% c("CC0", "CC-BY", "CC-BY-NC"))
 
 data2 <- read_csv("data/observations-365582.csv") %>%
   filter(!is.na(scientific_name)) %>%
@@ -31,8 +32,9 @@ data2 <- read_csv("data/observations-365582.csv") %>%
   mutate(observed_on = as.Date(observed_on, format = "%Y-%m-%d")) %>% 
   rename(species = scientific_name,
          eventDate = observed_on) %>% 
+  filter(!is.na(eventDate)) %>% 
   mutate(year = lubridate::year(eventDate))  %>%
-  filter(!is.na(eventDate))
+  filter(!is.na(license), license %in% c("CC0", "CC-BY", "CC-BY-NC"))
 
 data3 <- read_csv("data/observations-366081.csv") %>%
   filter(!is.na(scientific_name)) %>%
@@ -41,8 +43,9 @@ data3 <- read_csv("data/observations-366081.csv") %>%
   mutate(observed_on = as.Date(observed_on, format = "%Y-%m-%d")) %>% 
   rename(species = scientific_name,
          eventDate = observed_on) %>% 
+  filter(!is.na(eventDate)) %>% 
   mutate(year = lubridate::year(eventDate))  %>%
-  filter(!is.na(eventDate))
+  filter(!is.na(license), license %in% c("CC0", "CC-BY", "CC-BY-NC"))
 
 data <- rbind.data.frame(data1, data2, data3) %>% 
   filter(!duplicated(id))

@@ -208,6 +208,41 @@ draw_new_samples_spatial <- function(grid_summary,
 }
 
 
+# This function creates a density plot for one user's permuted distributions
+plot_user <- function(user_dists, user_values,
+                      this_user_login = NULL, this_taxon = NULL) {
+  
+  if (is.null(this_user_login) && is.null(this_taxon)) {
+    this_comparison <- user_values %>% 
+      distinct(user_login, taxon) %>% 
+      sample_n(size = 1)
+    this_user_login <- this_comparison$user_login
+    this_taxon <- this_comparison$taxon
+  } else if (is.null(this_user_login)) {
+    this_comparison <- user_values %>% 
+      distinct(user_login, taxon) %>% 
+      filter(taxon == this_taxon) %>% 
+      sample_n(size = 1)
+    this_user_login <- this_comparison$user_login
+  }
+  
+  this_user_dists <- user_dists %>% filter(user == this_user_login, 
+                                           taxon == this_taxon)
+  this_user_values <- user_values %>% filter(user_login == this_user_login,
+                                             taxon == this_taxon)
+  ggplot() +
+    geom_density(data = this_user_dists, 
+                 aes(propUnique, group = bias_index, fill = bias_index), 
+                 alpha = 0.5) +
+    scale_fill_gradient2(mid = "gray") +
+    geom_vline(data = this_user_values, aes(xintercept=observed_propUnique)) +
+    theme_minimal() +
+    ylab("") +
+    ggtitle(paste0("User ", this_user_login, ", taxon: ", this_taxon,
+                   ". nobs = ", this_user_values$nobsT))
+}
+
+
 # This function runs the whole exercise to generate the permutations
 # of species histories for a given user
 runOneUser <- function(i, target_users, bias_index_grid, grid_summary, dat,
@@ -264,7 +299,7 @@ runOneUser <- function(i, target_users, bias_index_grid, grid_summary, dat,
   output <- bind_rows(this_user, this_user_finer)
   
   if (write.out) {
-    write_csv(output, paste0("regroup/intermediate/", taxon, "_", i, ".csv"))
+    write_csv(output, paste0("intermediate/", taxon, "_", i, ".csv"))
   }
   
   return(bind_rows(this_user, this_user_finer))

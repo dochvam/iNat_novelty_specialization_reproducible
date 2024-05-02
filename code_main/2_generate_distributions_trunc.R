@@ -9,14 +9,14 @@ library(tidyverse)
 library(lubridate)
 library(pbapply)
 
-ncores <- 40
+ncores <- 25
 
 # Read in processed data
 data_user_species <- read_csv("intermediate/data_user_species.csv")
 user_info <- read_csv("intermediate/pa_user_info.csv")
 
 # Load helper functions
-source("helper_code/functions.R")
+source("code_helper/functions.R")
 
 
 target_taxa <- c("Insects", "Plants", "Herptiles", "Arachnids", "Birds", "Mammals", "All")
@@ -131,7 +131,7 @@ for (t_ind in 1:length(target_taxa)) {
     
     prep <- clusterEvalQ(cl, {
       library(tidyverse)
-      source("helper_code/functions.R")
+      source("code_helper/functions.R")
       NULL
     })
     

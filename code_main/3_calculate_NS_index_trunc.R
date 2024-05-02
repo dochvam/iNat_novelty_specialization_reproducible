@@ -10,7 +10,7 @@ library(mixtools)
 library(parallel)
 
 # Load in helper functions
-source("helper_code/functions.R")
+source("code_helper/functions.R")
 
 ncores <- 40
 
@@ -89,36 +89,3 @@ if (ncores > 1) {
 
 
 write_csv(result_df, "intermediate/estimated_user_BIs_allPA.csv")
-
-result_df <- read.csv("intermediate/estimated_user_BIs_allPA.csv")
-
-result_df %>% 
-  count(taxon, type) %>% 
-  group_by(taxon) %>% 
-  mutate(pct = n / sum(n)) %>% 
-  ggplot(aes(type, n, fill = type)) +
-  geom_col() + 
-  facet_wrap(~taxon, scales = "free_y")
-
-#
-
-ggplot(result_df) +
-  geom_histogram(aes(bias_index, fill = type))
-
-
-result_df %>% 
-  left_join(user_info) %>% 
-  filter(taxon == "All") %>% 
-  ggplot(aes(log(nobsT), bias_index, ymin = Q025, ymax = Q975,
-             col = type)) +
-  geom_pointrange()
-
-result_df %>% 
-  left_join(user_info) %>% 
-  # filter(taxon == "All") %>% 
-  ggplot(aes(log(nobsT), bias_index, ymin = Q025, ymax = Q975,
-             col = type)) +
-  geom_pointrange(alpha = 0.8) +
-  theme_minimal() +
-  facet_wrap(~taxon)
-
