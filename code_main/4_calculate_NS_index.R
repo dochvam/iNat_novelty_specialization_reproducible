@@ -1,5 +1,5 @@
 #############################################################
-# 3_calculate_NS_index.R
+# 4_calculate_NS_index.R
 #
 # This file contains the code for calculating the NS index
 # based on the results from script 2

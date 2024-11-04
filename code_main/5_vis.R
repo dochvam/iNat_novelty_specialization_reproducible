@@ -1,8 +1,8 @@
 #############################################################
-# 4_vis.R
+# 5_vis.R
 #
 # This file produces a variety of visualizations based on the
-# outputs of script 1-3
+# outputs of script 1-4
 #############################################################
 
 library(tidyverse)
@@ -14,12 +14,15 @@ colors <- c("Specialization" = "#f0027f",
             "Novelty" = "#386cb0")
 
 
-result_df <- read_csv("intermediate/estimated_user_BIs_allPA.csv") %>% 
-  mutate(type = recode(type, "Favoritism" = "Specialization")) %>% 
+result_df_hypos <- read_csv("intermediate/inference_decisions.csv") %>% 
+  mutate(type = recode(inferred_behavior, "Favoritism" = "Specialization")) %>% 
   mutate(type = factor(type, levels = names(colors)))
-  
+result_df_values <- read_csv("intermediate/estimated_user_BIs_allPA.csv") %>% 
+  select(-type) %>% 
+  left_join(result_df_hypos[, c("user_login", "taxon", "type")])
 
-user_info <- lapply(list.files("intermediate/", pattern = "user_summary_",
+
+user_info <- lapply(list.files("intermediate", pattern = "user_summary_",
                                full.names = TRUE), read_csv) %>% 
   bind_rows()
 
@@ -28,63 +31,51 @@ user_info <- lapply(list.files("intermediate/", pattern = "user_summary_",
 user_dists <- bind_rows(lapply(list.files("intermediate/", pattern = 'userDist',
                                           full.names = TRUE), read_csv))
 
-plot_user(this_taxon = "All", this_user_login = "catspit", user_dists, user_info)
-
-
-user_dists %>% filter(taxon == "All", 
-                      user == "catspit", 
-                      abs(bias_index - -0.2) <= 1e-3 | 
-                      abs(bias_index - 0.2) <= 1e-3) %>% 
-  ggplot() +
-  geom_density(aes(propUnique, group = bias_index, fill = bias_index),
-               alpha = 0.5) +
-  scale_fill_gradient2(mid = "gray") +
-  theme_minimal() +
-  ylab("Density")
+plot_user(this_taxon = "All", this_user = "catspit", user_dists, user_info)
 
 
 #### 
 
-(taxon_counts_all <- result_df %>% 
-  count(taxon, type) %>%
-  filter(taxon == "All") %>%
-  group_by(taxon) %>% 
-  mutate(pct = n / sum(n),
-         taxon = paste0(taxon, " (n=", sum(n), ")")) %>% 
-  ggplot(aes(type, n, fill = type)) +
-  geom_col(show.legend = F) + 
-  facet_wrap(~taxon, scales = "free_y") +
-  scale_fill_manual("Bias type", values = colors) +
-  xlab("") + ylab("Number of users") +
-  theme_minimal())
-(taxon_counts_taxon <- result_df %>% 
-  count(taxon, type) %>%
+(taxon_counts_all <- result_df_hypos %>% 
+    count(taxon, type) %>%
+    filter(taxon == "All") %>%
+    group_by(taxon) %>% 
+    mutate(pct = n / sum(n),
+           taxon = paste0(taxon, " (n=", sum(n), ")")) %>% 
+    ggplot(aes(type, n, fill = type)) +
+    geom_col(show.legend = F) + 
+    facet_wrap(~taxon, scales = "free_y") +
+    scale_fill_manual("Inferred\nbehavior", values = colors) +
+    xlab("") + ylab("Number of users") +
+    theme_minimal())
+(taxon_counts_taxon <- result_df_hypos %>% 
+    count(taxon, type) %>%
     filter(taxon != "All") %>% 
-  group_by(taxon) %>% 
-  mutate(pct = n / sum(n),
-         taxon = paste0(taxon, " (n=", sum(n), ")")) %>% 
-  ggplot(aes(type, n, fill = type)) +
-  geom_col(show.legend = F) + 
-  facet_wrap(~taxon, scales = "free_y") +
-  scale_fill_manual("Bias type", values = colors) +
-  xlab("") + ylab("Number of users") +
-  theme_minimal())
+    group_by(taxon) %>% 
+    mutate(pct = n / sum(n),
+           taxon = paste0(taxon, " (n=", sum(n), ")")) %>% 
+    ggplot(aes(type, n, fill = type)) +
+    geom_col(show.legend = F) + 
+    facet_wrap(~taxon, scales = "free_y") +
+    scale_fill_manual("Inferred\nbehavior", values = colors) +
+    xlab("") + ylab("Number of users") +
+    theme_minimal())
 
 lmtx <- matrix(c(NA,2,1,2,NA,2), nrow = 2)
 
 taxon_counts_fig <- gridExtra::arrangeGrob(taxon_counts_all, taxon_counts_taxon, layout_matrix = lmtx,
-                                 widths = c(0.5, 1, 0.5), heights = c(1, 1.5))
+                                           widths = c(0.5, 1, 0.5), heights = c(1, 1.5))
 
 #
 
-ggplot(result_df) +
+ggplot(result_df_values) +
   geom_histogram(aes(bias_index, fill = type),
                  position = "identity", alpha = 0.5) +
-  scale_fill_manual("Bias type", values = colors) +
+  scale_fill_manual("Inferred\nbehavior", values = colors) +
   theme_minimal()
 
 
-pointcloud_fig <- result_df %>% 
+pointcloud_fig <- result_df_values %>% 
   left_join(user_info) %>% 
   ggplot(aes(log(nobsT), bias_index, ymin = Q025, ymax = Q975,
              col = type)) +
@@ -92,12 +83,12 @@ pointcloud_fig <- result_df %>%
   facet_wrap(~taxon) +
   xlab("Log number of obs.") +
   ylab("Bias index (95%CI)") +
-  scale_color_manual("Bias type", values = colors) + 
+  scale_color_manual("Inferred\nbehavior", values = colors) + 
   theme_minimal()
 
 alphas <- c(1, 0.5, 1)
 names(alphas) <- names(colors)
-(se_fig_All <- result_df %>% 
+(se_fig_All <- result_df_values %>% 
     filter(taxon == "All") %>% 
     left_join(user_info) %>% 
     ggplot(aes(log(nobsT), Q975-Q025, group = taxon, color = type, alpha = type)) +
@@ -106,44 +97,81 @@ names(alphas) <- names(colors)
     #             method = lm, formula = y~ poly(x, 2)) +
     xlab("Log number of obs.") +
     ylab("Width of 95%CI on bias index") +
-    scale_color_manual("Bias type", values = colors) +
-    scale_alpha_manual("Bias type", values = alphas) +
+    scale_color_manual("Inferred\nbehavior", values = colors) +
+    scale_alpha_manual("Inferred\nbehavior", values = alphas) +
     facet_wrap(~taxon) +
     theme_minimal())
-(se_fig_taxa <- result_df %>% 
-  filter(taxon != "All") %>% 
-  left_join(user_info) %>% 
-  ggplot(aes(log(nobsT), Q975-Q025, group = taxon, color = type, alpha = type)) +
-  geom_point() +
-  # geom_smooth(color = "black", alpha = 0.5,
-  #             method = lm, formula = y~ poly(x, 2)) +
-  xlab("Log number of obs.") +
-  ylab("Width of 95%CI on bias index") +
-  scale_color_manual("Bias type", values = colors) +
-  scale_alpha_manual("Bias type", values = alphas) +
-  facet_wrap(~taxon) +
-  theme_minimal())
+(se_fig_taxa <- result_df_values %>% 
+    filter(taxon != "All") %>% 
+    left_join(user_info) %>% 
+    ggplot(aes(log(nobsT), Q975-Q025, group = taxon, color = type, alpha = type)) +
+    geom_point() +
+    # geom_smooth(color = "black", alpha = 0.5,
+    #             method = lm, formula = y~ poly(x, 2)) +
+    xlab("Log number of obs.") +
+    ylab("Width of 95%CI on bias index") +
+    scale_color_manual("Inferred\nbehavior", values = colors) +
+    scale_alpha_manual("Inferred\nbehavior", values = alphas) +
+    facet_wrap(~taxon) +
+    theme_minimal())
 
 lmtx <- matrix(c(NA,2,1,2,NA,2), nrow = 2)
 
 se_fig <- gridExtra::arrangeGrob(se_fig_All, se_fig_taxa, layout_matrix = lmtx,
                                  widths = c(0.5, 1, 0.5), heights = c(1, 1.5))
 
+
+#### Figure illustrating the NS values we estimated ####
+
+
+NS_values_figure_all <- left_join(
+  result_df_hypos %>% select(user_login, taxon, type),
+  result_df_values %>% select(user_login, taxon, bias_index)
+) %>% 
+  filter(taxon == "All") %>% 
+  ggplot() + 
+  geom_histogram(aes(bias_index, fill = type),
+                 binwidth = 0.1, boundary = 0) +
+  geom_vline(xintercept = 0, col = "black") +
+  scale_fill_manual("Inferred\nbehavior", values = colors) +
+  theme_minimal() + xlab("Point estimate of NS index") + ylab("Num. observers") +
+  ggtitle("(A) All taxa")
+
+NS_values_figure_taxa <- left_join(
+  result_df_hypos %>% select(user_login, taxon, type),
+  result_df_values %>% select(user_login, taxon, bias_index)
+) %>% 
+  filter(taxon != "All") %>% 
+  ggplot() + 
+  geom_histogram(aes(bias_index, fill = type),
+                 binwidth = 0.1,
+                 boundary = 0, show.legend = F) +
+  geom_vline(xintercept = 0, col = "black") +
+  scale_fill_manual("Inferred\nbehavior", values = colors) +
+  facet_wrap(~taxon, scales = "free_y") +
+  theme_minimal() + xlab("Point estimate of NS index") + ylab("Num. observers") +
+  ggtitle("(B) Taxon-specific")
+
+NS_values <- gridExtra::arrangeGrob(NS_values_figure_all, NS_values_figure_taxa,
+                                    ncol = 1, heights = c(0.6, 1))
+ggsave("figs/NS_values.jpg", NS_values,
+       width= 7, height  = 6)
+
 #### How do users compare across taxa? ####
-result_all <- result_df %>% 
+result_all <- result_df_hypos %>% 
   select(user_login, taxon, type) %>% 
   filter(taxon == "All") %>% 
   rename(type_all = type) %>% 
   select(-taxon)
 
 # Calculate the percentages
-percentage_df <- result_df %>%
+percentage_df <- result_df_hypos %>%
   filter(user_login %in% result_all$user_login, taxon != "All") %>%
   select(user_login, taxon, type) %>% 
   left_join(result_all) %>%
   count(type_all, type) %>%
   mutate(percentage = n / sum(n))
-percentage_df_B <- result_df %>%
+percentage_df_B <- result_df_hypos %>%
   filter(user_login %in% result_all$user_login, taxon != "All") %>%
   select(user_login, taxon, type) %>% 
   left_join(result_all) %>%
@@ -159,8 +187,8 @@ cross_taxon_fig_A <- percentage_df %>%
                 color = ifelse(percentage > 0.5, "black", "white")),
             show.legend = F) +
   scale_fill_viridis_c("% of users", labels = scales::percent, limits = c(0, max(percentage_df_B$percentage))) + # to display the fill as percentages
-  xlab("Overall bias type") +
-  ylab("Taxon-specific bias type") +
+  xlab("Overall behavior") +
+  ylab("Taxon-specific behavior") +
   theme_minimal() + 
   coord_fixed() +
   scale_color_manual(values = c("black" = "black", "white" = "white")) +
@@ -174,8 +202,8 @@ cross_taxon_fig_B <- percentage_df_B %>%
                 color = ifelse(percentage > 0.5, "black", "white")),
             show.legend = F, size = 2.8) +
   scale_fill_viridis_c("% of users", labels = scales::percent) + # to display the fill as percentages
-  xlab("Overall bias type") +
-  ylab("Taxon-specific bias type") +
+  xlab("Overall behavior") +
+  ylab("Taxon-specific behavior") +
   theme_minimal() + 
   coord_fixed() +
   facet_wrap(~taxon, nrow = 1) +
@@ -189,18 +217,54 @@ cross_taxon_fig <- gridExtra::arrangeGrob(grobs  = list(
 
 #### save some plots ####
 
-ggsave("plots/fig1_counts.jpg", taxon_counts_fig, width = 7, height = 6)
-ggsave("plots/fig2_ptcloud.jpg", pointcloud_fig, width = 9, height = 6)
-ggsave("plots/fig3_SEs.jpg", se_fig, width = 9, height = 7)
-ggsave("plots/fig4_crossplot.jpg", cross_taxon_fig, width = 12, height = 5.5)
+ggsave("figs/fig1_counts.jpg", taxon_counts_fig, width = 7, height = 6)
+ggsave("figs/fig2_ptcloud.jpg", pointcloud_fig, width = 9, height = 6)
+ggsave("figs/fig3_SEs.jpg", se_fig, width = 9, height = 7)
+ggsave("figs/fig4_crossplot.jpg", cross_taxon_fig, width = 12, height = 5.5)
 
 #### Representative user plots (supplement?) ####
 
-user_values <- bind_rows(lapply(list.files("regroup/", pattern = 'user_summary_',
+user_values <- bind_rows(lapply(list.files("intermediate/", pattern = 'user_summary_',
                                            full.names = TRUE), read_csv))
-user_dists <- bind_rows(lapply(list.files("regroup/", pattern = 'userDist',
+user_dists <- bind_rows(lapply(list.files("intermediate/", pattern = 'userDist',
                                           full.names = TRUE), read_csv))
 
+
+plot_user <- function(user_dists, user_values,
+                      this_user_login = NULL, this_taxon = NULL) {
+  
+  if (is.null(this_user_login) && is.null(this_taxon)) {
+    this_comparison <- user_values %>% 
+      distinct(user_login, taxon) %>% 
+      sample_n(size = 1)
+    this_user_login <- this_comparison$user_login
+    this_taxon <- this_comparison$taxon
+  } else if (is.null(this_user_login)) {
+    this_comparison <- user_values %>% 
+      distinct(user_login, taxon) %>% 
+      filter(taxon == this_taxon) %>% 
+      sample_n(size = 1)
+    this_user_login <- this_comparison$user_login
+  }
+  
+  this_user_dists <- user_dists %>% filter(user == this_user_login, 
+                                           taxon == this_taxon)
+  this_user_values <- user_values %>% filter(user_login == this_user_login,
+                                             taxon == this_taxon)
+  ggplot() +
+    geom_density(data = this_user_dists, 
+                 aes(propUnique, group = bias_index, fill = bias_index), 
+                 alpha = 0.5) +
+    scale_fill_gradient2(mid = "gray") +
+    geom_vline(data = this_user_values, aes(xintercept=observed_propUnique)) +
+    theme_minimal() +
+    ylab("") +
+    ggtitle(paste0("User ", this_user_login, ", taxon: ", this_taxon,
+                   ". nobs = ", this_user_values$nobsT))
+}
+
+plot_user(this_taxon = "All", this_user = "pachogut", 
+          user_dists, user_values)
 
 # Figures:
 # > Counts by taxon
@@ -215,6 +279,7 @@ user_dists <- bind_rows(lapply(list.files("regroup/", pattern = 'userDist',
 
 #### Plot the hex grid over PA ####
 library(terra)
+library(tidyverse)
 library(tidyterra)
 
 # Make hex counts
@@ -233,26 +298,54 @@ specs_per_hex <- dat %>%
   distinct(gridcell, scientific_name) %>% 
   count(gridcell) %>% 
   rename(nspec = n)
+users_per_hex <- dat %>% 
+  distinct(gridcell, user_login) %>% 
+  count(gridcell) %>% 
+  rename(nuser = n)
+max_user_per_hex <- dat %>% 
+  count(gridcell, user_login) %>% 
+  group_by(gridcell) %>% 
+  summarize(prop_max = max(n) / sum(n)) %>% 
+  ungroup()
 
 hex_grid_vect <- vect(hex_grid)
 hex_grid_vect$gridcell <- 1:nrow(hex_grid_vect)
 hex_grid_vect <- left_join(hex_grid_vect, obs_per_hex, by = "gridcell") %>% 
   left_join(specs_per_hex, by = "gridcell") %>% 
+  left_join(users_per_hex, by = "gridcell") %>% 
+  left_join(max_user_per_hex, by = "gridcell") %>% 
   filter(n > 0) %>% 
   terra::project(PA_map)
 
-gridmap <- ggplot() +
-  geom_spatvector(data = hex_grid_vect, aes(fill = log(n))) +
+gridmap <- ggplot() + 
+  geom_spatvector(data = hex_grid_vect, aes(fill = n)) +
   geom_spatvector(data = PA_map, fill = NA, col = "black", linewidth = 0.8) +
   theme_minimal() +
-  scale_fill_viridis_c("Log number of \niNaturalist obs.")
+  scale_fill_viridis_c("Number of \niNaturalist obs.", trans = "log",
+                       breaks = c(1, 20, 400, 8000))
 gridmap2 <- ggplot() +
-  geom_spatvector(data = hex_grid_vect, aes(fill = log(nspec))) +
+  geom_spatvector(data = hex_grid_vect, aes(fill = nspec)) +
   geom_spatvector(data = PA_map, fill = NA, col = "black", linewidth = 0.8) +
   theme_minimal() +
-  scale_fill_viridis_c("Log number of \nspecies observed")
+  scale_fill_viridis_c("Number of \nspecies observed", trans = "log",
+                       breaks = c(1, 8, 160, 2400))
+gridmap3 <- ggplot() +
+  geom_spatvector(data = hex_grid_vect, aes(fill = nuser)) +
+  geom_spatvector(data = PA_map, fill = NA, col = "black", linewidth = 0.8) +
+  theme_minimal() +
+  scale_fill_viridis_c("Number of \nunique observers", trans = "log",
+                       breaks = c(1, 12, 120, 1400))
+gridmap4 <- ggplot() +
+  geom_spatvector(data = hex_grid_vect, aes(fill = prop_max)) +
+  geom_spatvector(data = PA_map, fill = NA, col = "black", linewidth = 0.8) +
+  theme_minimal() +
+  scale_fill_viridis_c("Pct. obs. from\ntop user")
 
-ggsave("plots/hexmap.jpg", gridmap, width = 6, height = 3.5)
+
+hex_map <- gridExtra::arrangeGrob(grobs = list(gridmap, gridmap2, gridmap3, gridmap4),
+                                  ncol = 1)
+
+ggsave("figs/hexmap.jpg", hex_map, width = 6, height = 9)
 
 
 #### Visualize basics ####
@@ -275,7 +368,7 @@ all_dat <- read_csv("intermediate/data_user_species.csv") %>%
                                     "Insecta" = "Insects", 
                                     "Mammalia" = "Mammals", "Plantae" = "Plants"
                                     
-                                    ))
+  ))
 
 spec_counts <- data.frame(
   taxon = c("All", "Arachnids", "Birds", "Herptiles",
@@ -293,14 +386,19 @@ for (i in 1:nrow(spec_counts)) {
   spec_counts$nspec[i] <- length(unique(obs$scientific_name))
 }
 
-  
-  
-  
-spec_counts %>% 
+
+
+
+spec_counts_by_taxon <- spec_counts %>% 
+  filter(taxon != "All") %>% 
   ggplot() +
   geom_col(aes(taxon, nspec)) +
   theme_minimal() + xlab("Taxonomic group") + ylab("Num. species") +
-  ggtitle("Number of species in each taxonomic group")
+  ggtitle("Number of species per taxonomic group") +
+  scale_y_log10(breaks = c(6, 20, 60, 200, 600, 2000, 6000)) + 
+  theme(panel.grid.minor = element_blank())
+ggsave("figs/taxon_spec_counts.jpg", spec_counts_by_taxon,
+       width = 5, height = 4)
 
 #### Visualize top orders of favoritists ####
 # Make hex counts
@@ -357,71 +455,4 @@ ggplot(top_taxon_data) +
   xlab("Pct. of observations which are the top taxon") +
   ylab("Density") +
   theme_minimal()
-
-
-#### Make example plots of particular users ####
-user_specialist <- "huntingbon"
-user_novelist <- "kfryberger"
-
-result_df %>% 
-  filter(user_login %in% c(user_specialist, user_novelist),
-         taxon == "All")
-
-taxon_colors <- c(
-  "Plants" = "#b2df8a",
-  "Arachnids" = "#a6cee3",
-  "Birds" = "#1f78b4",
-  "Herptiles" = "#ff7f00",
-  "Insects" = "#fb9a99",
-  "Mammals" = "#e31a1c",
-  "Other" = "gray"
-)
-
-pA <- plot_user(user_dists, user_values, user_specialist, "All") +
-  ggtitle("User 1 (specialist)") + theme(plot.title = element_text(size = 9, hjust = 0.5))
-pB <- plot_user(user_dists, user_values, user_novelist, "All") +
-  ggtitle("User 2 (novelist)") + theme(plot.title = element_text(size = 9, hjust = 0.5))
-
-# Make a barcode for user A
-(
-pC <- all_dat %>% 
-  filter(user_login %in% c(user_specialist, user_novelist)) %>% 
-    mutate(NAME = ifelse(user_login == user_specialist, 
-                         "User 1 (specialist)", "User 2 (Novelist)")) %>% 
-  mutate(iconic_taxon_name = ifelse(iconic_taxon_name %in% unique(result_df$taxon),
-                                    iconic_taxon_name, "Other")) %>% 
-  mutate(iconic_taxon_name = factor(iconic_taxon_name, levels = c(sort(unique(result_df$taxon)), "Other"))) %>% 
-  ggplot() + 
-  geom_tile(aes(numObs, 1, fill = iconic_taxon_name)) +
-  scale_fill_manual("Taxon", values = taxon_colors) +
-    theme_minimal() + xlab("Observation") + ylab("")  +
-    facet_wrap(~NAME) + theme(axis.text.y = element_blank()) +
-    ggtitle("B. Detection history barcode (by taxon)")
-)
-(
-pD <- all_dat %>% 
-    filter(user_login %in% c(user_specialist, user_novelist)) %>% 
-    mutate(NAME = ifelse(user_login == user_specialist, 
-                         "User 1 (specialist)", "User 2 (Novelist)")) %>% 
-    mutate(iconic_taxon_name = ifelse(iconic_taxon_name %in% unique(result_df$taxon),
-                                    iconic_taxon_name, "Other")) %>% 
-  mutate(iconic_taxon_name = factor(iconic_taxon_name, levels = c(sort(unique(result_df$taxon)), "Other"))) %>% 
-  ggplot() + 
-  geom_tile(aes(numObs, 1, fill = isNew)) +
-  scale_fill_manual("New species", values = c("gray", "#a00040")) +
-  theme_minimal() + xlab("Observation") + ylab("")  +
-    facet_wrap(~NAME) + theme(axis.text.y = element_blank()) +
-  ggtitle("C. Detection history barcode (new vs. old species)")
-)
-
-library(grid)
-library(gridExtra)
-layout_mtx <- matrix(c(1,2,3,3,4,4), nrow = 3, byrow = T)
-title <- grid::textGrob("A. Observed and alternative distributions from permutation test", 
-                        gp = gpar(fontsize = 14), hjust = 0, x =  unit(8, "mm"))
-users_fig <- gridExtra::arrangeGrob(pA, pB, pC, pD, layout_matrix = layout_mtx,
-                                    heights = c(0.7, 0.5, 0.5),
-                                    top = title)
-ggsave(users_fig, filename = "plots/users_fig.jpg",
-       width = 10, height = 7)
 

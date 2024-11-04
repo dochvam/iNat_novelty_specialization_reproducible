@@ -5,9 +5,9 @@
 # validation simulations
 #############################################################
 
+#### function to run the simulation ####
 
-# Run the entire simulation for a given set of conditions:
-run_validation_simulation <- function(nusers, nspecies, nhex, 
+run_validation_simulation <- function(nusers, nspecies, nhex, nrep_per,
                                       nobs_per_user, bias_indexes, ncores,
                                       sim_name, real_det_rates = NULL) {
   
@@ -30,7 +30,8 @@ run_validation_simulation <- function(nusers, nspecies, nhex,
                                            zif = 0.5)
   
   # Simulate user grid cells
-  user_gridcell_hists <- simulate_gridcell_hists(nusers, nhex, nobs_per_user)
+  user_gridcell_hists <- simulate_gridcell_hists(nusers, nhex, nobs_per_user,
+                                                 grid_summary_true)
   
   
   # Generate user data from prevalence and grid cell history, given known bias
@@ -40,13 +41,16 @@ run_validation_simulation <- function(nusers, nspecies, nhex,
                                   bias_indexes)
   
   user_data$gridcell <- user_data$hex
-  user_data$iconic_taxon_name <- "Arachnidae" # Placeholder
+  user_data$iconic_taxon_name <- "Sim" # Placeholder
   
   user_values <<- user_data %>% 
     group_by(user_login) %>% 
     summarize(observed_propUnique = length(unique(scientific_name)) / n()) %>% 
-    mutate(taxon = "Arachnidae",
-           sim_name = sim_name)
+    mutate(taxon = "Sim", 
+           sim_name = sim_name,
+           true_NS = bias_indexes,
+           sim_name = sim_name,
+           true_nobs = nobs_per_user)
   
   
   grid_summary_observed <- make_grid_summary(user_data)
@@ -55,9 +59,9 @@ run_validation_simulation <- function(nusers, nspecies, nhex,
   # to do the entire workflow.
   byUserResultsAlt <- vector("list", nusers)
   
-  bias_index_grid <- c(-0.99, seq(from = -0.8, to = 0.8, by = 0.2), 0.99)
+  bias_index_grid <- c(0)
   
-  npoints_fine <- 12
+  npoints_fine <- 0
   
   cl <- makeCluster(ncores)
   
@@ -75,48 +79,29 @@ run_validation_simulation <- function(nusers, nspecies, nhex,
                                 grid_summary = grid_summary_observed, 
                                 dat = user_data,
                                 npoints_fine = npoints_fine,
-                                n = n,
-                                taxon = "Arachnidae",
-                                write.out = TRUE)
-  
-  user_dists <<- bind_rows(byUserResultsAlt) %>% 
-    mutate(taxon = "Arachnidae")
-  
-  prep <- clusterExport(cl, varlist = list("get_bias_index",
-                                           "get_index_weights",
-                                           "get_density",
-                                           "user_dists",
-                                           "user_values"))
-  
-  result_list <- parLapply(cl, 1:nusers, function(i) {
-    get_bias_index(user_dists = user_dists,
-                   user_values = user_values, 
-                   this_user_login = user_values$user_login[i],
-                   user_values$taxon[i])
-  })
-  
-  result_df <- bind_rows(result_list) %>% 
-    mutate(type = ifelse(
-      sign(Q025) == sign(Q975), 
-      ifelse(sign(Q025) == -1, "Favoritism", "Novelty"),
-      "Null"
-    )) %>% 
-    mutate(true_bias_index = bias_indexes,
-           sim_name = sim_name)
-  
+                                n = nrep_per,
+                                taxon = "Sim",
+                                write.out = FALSE)
   stopCluster(cl)
   
-  result_df$true_bias_index <- bias_indexes
-  result_df$true_nobs <- nobs_per_user
-  result_df$sim_name <- sim_name
+  user_dists <<- bind_rows(byUserResultsAlt) %>% 
+    mutate(taxon = "Sim")
   
-  return(list(
-    result_df = result_df,
-    user_values = user_values
-  ))
+  result_df <- user_dists %>%
+    left_join(user_values, by = c("user" = "user_login", "taxon")) %>% 
+    group_by(user, taxon, true_NS, sim_name, true_nobs, observed_propUnique) %>% 
+    summarize(gt_rate = mean(observed_propUnique > propUnique),
+              lt_rate = mean(observed_propUnique < propUnique)) %>% 
+    mutate(type = ifelse(
+      gt_rate > 0.975, 
+      "Novelty",
+      ifelse(lt_rate > 0.975, "Specialization", "Null")
+    ))
+  
+  return(result_df)
 }
 
-# Simulate a true prevelance gradient for a species pool
+
 simulate_prevalence <- function(nspecies, abundance, nhex, zif) {
   
   if (length(abundance) == 1) {
@@ -126,14 +111,10 @@ simulate_prevalence <- function(nspecies, abundance, nhex, zif) {
   }
   
   prevalence_mtx <- matrix(integer(), nrow = nspecies, ncol = nhex)
-
   
-  
-  for (i in 1:nspecies) {
-    for (j in 1:nhex) {
-      nonzero <- rbinom(1,1,1-zif)
-      prevalence_mtx[i, j] <- rpois(1, nonzero * abundance[i])
-    }
+  for (j in 1:nhex) {
+    nonzero <- rbinom(nspecies,1,1-zif)
+    prevalence_mtx[, j] <- rpois(nspecies, nonzero * abundance)
   }
   
   if (any(colSums(prevalence_mtx) == 0)) {
@@ -152,26 +133,25 @@ simulate_prevalence <- function(nspecies, abundance, nhex, zif) {
   return(grid_summary)
 }
 
-# Simulate spatial patterns in sampling for all the simulated users
-simulate_gridcell_hists <- function(nusers, nhex, nobs_per_user) {
+
+simulate_gridcell_hists <- function(nusers, nhex, nobs_per_user, grid_summary_true) {
   
   user_df_list <- list()
-
+  
+  obs_per_hex <- lapply(grid_summary_true, nrow) %>% as.numeric()
+  
   for (i in 1:nusers) {
     user_df_list[[i]] <- data.frame(
       user_login = i,
       obs_num = 1:nobs_per_user[i], 
       eventDate = as.Date("2000-01-01") + 1:nobs_per_user[i],
-      hex = sample(1:nhex, size = nobs_per_user[i], replace = T)
+      hex = sample(which(obs_per_hex > 0), size = nobs_per_user[i], replace = T)
     )
   }  
   
   return(bind_rows(user_df_list))
 }
 
-
-# Simulate observer behaviors using the permutation function from the main
-# analysis
 generate_user_data <- function(grid_summary_true, user_gridcell_hists,
                                bias_indexes) {
   
@@ -180,7 +160,6 @@ generate_user_data <- function(grid_summary_true, user_gridcell_hists,
   
   for (i in 1:length(bias_indexes)) {
     this_inds <- which(user_data$user_login == i)
-    
     user_data$scientific_name[this_inds] <- draw_new_samples_spatial(
       grid_summary_true, 
       grid_sampling_history = user_data$hex[this_inds], 
@@ -190,6 +169,10 @@ generate_user_data <- function(grid_summary_true, user_gridcell_hists,
   
   return(user_data)
 }
+
+
+
+
 
 
 
